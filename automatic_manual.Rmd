@@ -1,0 +1,118 @@
+---
+title: "Comparison of automatic and manual transmissions"
+author: "Simone"
+date: "2/23/2020"
+output: pdf_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width = 12, fig.height = 5)
+```
+
+## Executive summary
+
+The purpose of this project is to look at the **mtcars** dataset to answer the following two questions:  
+- Is an automatic or manual transmission better for miles per gallon?  
+- What is the miles per gallon difference between automatic and manual transmissions?
+
+Using the best model that we examined, our conclusion is that **manual transmissions are better than automatic transmissions in terms of miles per gallon**, all the rest being equal (significative result), and in particular **they can achieve** ***4.300*** **miles per gallon more**.
+
+## Loading and exploring the dataset
+
+```{r chunk_1, results = "hide"}
+library(datasets)
+data(mtcars)
+```
+
+The data cointains 32 observations on 11 (numeric) variables.
+
+```{r chunk_2}
+colnames(mtcars)
+```
+
+The columns are: (1) **mpg**	(miles per US gallon), (2) **cyl** (number of cylinders), (3) **disp** (displacement in cu.in.), (4) **hp** (gross horsepower), (5) **drat** (rear axle ratio), (6) **wt** (weight with 1000 lbs unit), (7) **qsec** (1/4 mile time), (8) **vs** (engine: 0 = V-shaped, 1 = straight), (9) **am** (transmission: 0 = automatic, 1 = manual), (10) **gear** (number of forward gears), (11) **carb** (number of carburetors)
+
+```{r chunk_3}
+with(mtcars, boxplot(mpg ~ factor(am), col = c("red", "green"), main = "Automatic vs Manual",
+                     xlab = c("Automatic = 0, Manual = 1"), ylab = "Miles per gallon"))
+delta_mean_manual_automatic <- with(mtcars, mean(mpg[am == 1]) - mean(mpg[am == 0]))
+```
+
+Here we can see that if we base our analysis on the variable **am** alone, on average manual cars have an **mpg** value ***`r format(round(delta_mean_manual_automatic, 3), nsmall = 3)`*** higher than automatic cars. However, like this we are ignoring the effect of the other variables, which could be significative.
+
+```{r chunk_4}
+round(cor(mtcars)[1,sort(abs(cor(mtcars)[1,]), decreasing = TRUE, index.return = TRUE)$ix], 3)
+```
+
+In fact, **mpg** is mostly correlated, in decreasing order, with **wt** (negative), **cyl** (negative), **disp** (negative), **hp** (negative), **drat** (positive), **vs** (positive) and only then **am** (positive, as expected from the previous boxplot and delta mean calculation).
+
+## Model selection (strategy 1)
+
+In the first strategy, we define models by progressively adding new variables based on the correlation order with **mpg** and then we select the best model running the anova test (in ***Appendix***).
+
+```{r chunk_5}
+fit1 <- lm(mpg ~ am, data = mtcars)
+fit2 <- lm(mpg ~ am + wt, data = mtcars)
+fit3 <- lm(mpg ~ am + wt + hp, data = mtcars)
+fit4 <- lm(mpg ~ am + wt + hp + cyl + disp, data = mtcars)
+fit5 <- lm(mpg ~ am + wt + hp + cyl + disp + drat + vs, data = mtcars)
+fit6 <- lm(mpg ~ ., data = mtcars)
+```
+
+Moving from fit1 to fit2 and from fit2 to fit3 the p-value is less than 0.05, so with a 95% confidence level we can say that the 2 new variables introduced (**wt** and **hp**) are both significative, however after that the next new variables are not significative anymore (p-value > 0.05), therefore we select model **fit3**, which has a residual standard error of ***`r format(round(summary(fit3)$sigma, 3), nsmall = 3)`*** and an adjusted R-squared of ***`r format(round(summary(fit3)$adj.r.squared, 3), nsmall = 3)`***.
+
+```{r chunk_6}
+round(t(summary(fit3)$coeff[,c(1,4)]), 3)
+```
+  
+Looking at the coefficients of the final model, **am** appears to have a positive effect on **mpg** (in particular the coefficient is ***`r format(round(fit3$coefficients[2], 3), nsmall = 3)`***, indicating that manual cars tend to have higher miles per gallon than automatic cars, all the rest being equal.
+  
+The problem with this conclusion, though, is that **am** doesn't appear to be significative (because the p-value for it's coefficient is ***`r format(round(summary(fit3)$coefficients[2,4], 3), nsmall = 3)`***) and therefore we should accept the null hypothesis (**am** doesn't impact **mpg**).
+
+## Model selection (strategy 2)
+
+In this second strategy we start with all the variables (the full model fit6) and then we progressively remove them one by one, selecting everytime the one with the highest p-value, until only significant variables are left (the summary of all the models is in ***Appendix***).
+
+```{r chunk_7}
+fit7 <- lm(mpg ~ . - cyl, data = mtcars)
+fit8 <- lm(mpg ~ . - cyl - vs, data = mtcars)
+fit9 <- lm(mpg ~ . - cyl - vs - carb, data = mtcars)
+fit10 <- lm(mpg ~ . - cyl - vs - carb - gear, data = mtcars)
+fit11 <- lm(mpg ~ . - cyl - vs - carb - gear - drat, data = mtcars)
+fit12 <- lm(mpg ~ . - cyl - vs - carb - gear - drat - disp, data = mtcars)
+fit13 <- lm(mpg ~ . - cyl - vs - carb - gear - drat - disp - hp, data = mtcars)
+fit14 <- lm(mpg ~ . - cyl - vs - carb - gear - drat - disp - hp - 1, data = mtcars)
+```
+
+The final model **fit14** has a residual standard error of ***`r format(round(summary(fit14)$sigma, 3), nsmall = 3)`*** and an adjusted R-squared of ***`r format(round(summary(fit14)$adj.r.squared, 3), nsmall = 3)`***, which are both better than the previous best model **fit3**.
+
+```{r chunk_8}
+round(t(summary(fit14)$coeff[,c(1,4)]), 3)
+```
+
+Furthermore here **am** is significative (p-value < 0.05) and still has a positive effect on **mpg** (the coefficient is ***`r format(round(fit14$coefficients[3], 3), nsmall = 3)`***), indicating that manual cars have higher miles per gallon than automatic cars all the rest being equal, albeit less than what initially forecasted by looking simply at the effect of **am** alone. The other significative variables are **wt** (negative effect) and **qsec** (positive effect), which appears to make sense.
+
+## Conclusion
+
+Both from a model performance perspective, and **am** significance perspective, we finally select model **fit14**.
+  
+However, as a last step, we run some diagnostics on the model, but we do not observe any big problem with any of the plots.
+
+```{r chunk_9}
+par(mfrow = c(2,2))
+plot(fit14)
+```
+
+## Appendix
+
+```{r appendix}
+anova(fit1, fit2, fit3, fit4, fit5, fit6)
+round(t(summary(fit6)$coeff[,c(1,4)]), 3)
+round(t(summary(fit7)$coeff[,c(1,4)]), 3)
+round(t(summary(fit8)$coeff[,c(1,4)]), 3)
+round(t(summary(fit9)$coeff[,c(1,4)]), 3)
+round(t(summary(fit10)$coeff[,c(1,4)]), 3)
+round(t(summary(fit11)$coeff[,c(1,4)]), 3)
+round(t(summary(fit12)$coeff[,c(1,4)]), 3)
+round(t(summary(fit13)$coeff[,c(1,4)]), 3)
+```
